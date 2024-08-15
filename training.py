@@ -264,7 +264,7 @@ class Trainer(abc.ABC):
             self.logger.add_hparams(hparam_dict, metric_dict, run_name=run_name)
 
 
-class RegularTrainer(Trainer):
+class BinaryTrainer(Trainer):
     """
     Args:
         model (nn.Module): The model to be trained.
@@ -312,7 +312,7 @@ class RegularTrainer(Trainer):
         loss.backward()
         self.optimizer.step()
 
-        num_correct = torch.sum((preds - y).norm(dim=1) <= 0.5)
+        num_correct = torch.sum((preds > 0.5) == y)
 
         return self._make_batch_result(loss, num_correct)
 
@@ -326,6 +326,6 @@ class RegularTrainer(Trainer):
         preds = self.model.forward(X)
 
         loss = self.loss_fn(preds, y)
-        num_correct = torch.sum((preds - y).norm(dim=1) < 0.5)
+        num_correct = torch.sum((preds > 0.5) == y)
 
         return self._make_batch_result(loss, num_correct)
