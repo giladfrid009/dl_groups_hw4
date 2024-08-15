@@ -11,7 +11,7 @@ from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from wtracker.neural.train_results import FitResult, BatchResult, EpochResult
+from train_results import FitResult, BatchResult, EpochResult
 
 
 class Trainer(abc.ABC):
@@ -264,12 +264,10 @@ class Trainer(abc.ABC):
             self.logger.add_hparams(hparam_dict, metric_dict, run_name=run_name)
 
 
-class MLPTrainer(Trainer):
+class RegularTrainer(Trainer):
     """
-    The `MLPTrainer` class is responsible for training and testing a multi-layer perceptron (MLP) models.
-
     Args:
-        model (nn.Module): The MLP model to be trained.
+        model (nn.Module): The model to be trained.
         loss_fn (nn.Module): The loss function used for training.
         optimizer (Optimizer): The optimizer used for updating the model's parameters.
         device (Optional[torch.device], optional): The device on which the model and data should be loaded.
@@ -314,7 +312,7 @@ class MLPTrainer(Trainer):
         loss.backward()
         self.optimizer.step()
 
-        num_correct = torch.sum((preds - y).norm(dim=1) < 1.0)
+        num_correct = torch.sum((preds - y).norm(dim=1) <= 0.5)
 
         return self._make_batch_result(loss, num_correct)
 
@@ -327,7 +325,7 @@ class MLPTrainer(Trainer):
 
         preds = self.model.forward(X)
 
-        num_correct = torch.sum((preds - y).norm(dim=1) < 1.0)
         loss = self.loss_fn(preds, y)
+        num_correct = torch.sum((preds - y).norm(dim=1) < 0.5)
 
         return self._make_batch_result(loss, num_correct)
