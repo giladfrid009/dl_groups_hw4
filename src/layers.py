@@ -118,5 +118,14 @@ class PositionalEncoding(nn.Module):
         self.register_buffer("pe", pe, persistent=False)
 
     def forward(self, x: Tensor) -> Tensor:
+        """
+        Forward pass of the PositionalEncoding module.
+
+        Args:
+            x (Tensor): Input tensor of shape (batch_size, d, in_channels).
+
+        Returns:
+            Tensor: Output tensor of shape (batch_size, d, in_channels).
+        """
         x = x + self.pe[:, : x.size(1), :]
         return x
