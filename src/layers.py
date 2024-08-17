@@ -19,7 +19,7 @@ class LinearChanneled(nn.Module):
         self.out_channels = out_channels
         self.in_features = in_features
         self.out_features = out_features
-        self.b = torch.nn.Parameter(torch.randn(in_channels, out_channels, out_features, in_features))
+        self.bias = torch.nn.Parameter(torch.randn(in_channels, out_channels, out_features, in_features))
         self.weights = torch.nn.Parameter(torch.randn(in_channels, out_channels, out_features, in_features))
 
     def forward(self, x: Tensor) -> Tensor:
@@ -41,7 +41,7 @@ class LinearChanneled(nn.Module):
         x = x.view(-1, self.in_channels, 1, self.in_features, 1)
 
         # shape (batch_size, in_channels, out_channels, out_features, 1)
-        all = self.weights @ x + self.b
+        all = self.weights @ x + self.bias
 
         # shape (batch_size, out_channels, out_features)
         reduced = torch.mean(all, dim=(1, 4), keepdim=False)
@@ -65,7 +65,7 @@ class LinearEquivariant(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.b = torch.nn.Parameter(torch.randn(in_channels, out_channels))
+        self.bias = torch.nn.Parameter(torch.randn(in_channels, out_channels))
         self.alpha = torch.nn.Parameter(torch.randn(in_channels, out_channels))
         self.beta = torch.nn.Parameter(torch.randn(in_channels, out_channels))
 
@@ -90,7 +90,7 @@ class LinearEquivariant(nn.Module):
         x_sum = torch.sum(x, dim=1, keepdim=True)
 
         # shape (batch_size, d, in_channels, out_channels)
-        all = x * self.alpha + x_sum * self.beta + self.b
+        all = x * self.alpha + x_sum * self.beta + self.bias
 
         # shape (batch_size, d, out_channels)
         reduced = torch.mean(all, dim=2)
@@ -111,7 +111,7 @@ class LinearInvariant(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.b = torch.nn.Parameter(torch.randn(in_channels, out_channels))
+        self.bias = torch.nn.Parameter(torch.randn(in_channels, out_channels))
         self.alpha = torch.nn.Parameter(torch.randn(in_channels, out_channels))
 
     def forward(self, x: Tensor) -> Tensor:
@@ -134,7 +134,7 @@ class LinearInvariant(nn.Module):
         x_sum = torch.sum(x, dim=1, keepdim=True)
 
         # shape (batch_size, 1, in_channels, out_channels)
-        all = x_sum * self.alpha + self.b
+        all = x_sum * self.alpha + self.bias
 
         # shape (batch_size, 1, out_channels)
         reduced = torch.mean(all, dim=2)
