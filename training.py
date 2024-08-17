@@ -307,7 +307,8 @@ class BinaryTrainer(Trainer):
 
         self.model: nn.Module
         self.optimizer.zero_grad()
-        preds = self.model.forward(X)
+        preds: torch.Tensor = self.model.forward(X)
+        preds = preds.flatten()
         loss = self.loss_fn(preds, y)
         loss.backward()
         self.optimizer.step()
@@ -323,7 +324,8 @@ class BinaryTrainer(Trainer):
             X = X.to(self.device)
             y = y.to(self.device)
 
-        preds = self.model.forward(X)
+        preds: torch.Tensor = self.model.forward(X)
+        preds = preds.flatten()
 
         loss = self.loss_fn(preds, y)
         num_correct = torch.sum((preds > 0.5) == y)
