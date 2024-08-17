@@ -19,7 +19,7 @@ class LinearChanneled(nn.Module):
         self.out_channels = out_channels
         self.in_features = in_features
         self.out_features = out_features
-        self.bias = torch.nn.Parameter(torch.randn(in_channels, out_channels, out_features, in_features))
+        self.bias = torch.nn.Parameter(torch.randn(in_channels, out_channels, out_features))
         self.weights = torch.nn.Parameter(torch.randn(in_channels, out_channels, out_features, in_features))
 
     def forward(self, x: Tensor) -> Tensor:
@@ -40,11 +40,11 @@ class LinearChanneled(nn.Module):
         # shape (batch_size, in_channels, 1, in_features, 1)
         x = x.view(-1, self.in_channels, 1, self.in_features, 1)
 
-        # shape (batch_size, in_channels, out_channels, out_features, 1)
-        all = self.weights @ x + self.bias
+        # shape (batch_size, in_channels, out_channels, out_features)
+        all = (self.weights @ x).squeeze(-1) + self.bias.unsqueeze(0)
 
         # shape (batch_size, out_channels, out_features)
-        reduced = torch.mean(all, dim=(1, 4), keepdim=False)
+        reduced = torch.mean(all, dim=1, keepdim=False)
 
         # shape (batch_size, out_features, out_channels)
         reduced = reduced.permute(0, 2, 1)
