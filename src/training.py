@@ -11,7 +11,7 @@ from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from train_results import FitResult, BatchResult, EpochResult
+from src.train_results import FitResult, BatchResult, EpochResult
 
 
 class Trainer(abc.ABC):
