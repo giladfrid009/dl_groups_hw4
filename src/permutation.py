@@ -1,7 +1,6 @@
 import itertools
 from collections import deque
 from typing import Iterator
-
 import torch
 from torch import Tensor
 from torch import nn
