@@ -9,7 +9,10 @@ from torch import nn
 class Permutation(nn.Module):
     def __init__(self, perm: torch.Tensor) -> None:
         super().__init__()
-        self.perm = perm.clone().detach()
+
+        perm = perm.detach().clone()
+
+        self.register_buffer("perm", perm, persistent=False)
         self.hash = hash(tuple(perm.tolist()))
 
     def forward(self, x: Tensor) -> Tensor:
