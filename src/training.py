@@ -36,7 +36,11 @@ class Trainer(abc.ABC):
         log: bool = False,
     ):
         self.model = model
+
+        if device is None:
+            device = model.parameters().__next__().device
         self.device = device
+
         self.logger = None if not log else SummaryWriter()
         if self.logger is not None:
             self.logger.add_hparams({"model": model.__class__.__name__}, {}, run_name="hparams")
