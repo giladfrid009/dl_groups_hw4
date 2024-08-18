@@ -24,30 +24,63 @@ class Trainer(abc.ABC):
     - Single batch (train_batch/test_batch)
 
     Args:
-        model (nn.Module): The model to train.
-        device (Optional[torch.device], optional): The device to run training on (CPU or GPU).
+        model (nn.Module): The model to be trained.
+        loss_fn (nn.Module): The loss function used for training.
+        optimizer (Optimizer): The optimizer used for updating the model's parameters.
+        device (Optional[torch.device], optional): The device on which the model and data should be loaded.
         log (bool, optional): Whether to log training progress with tensorboard.
+
+    Attributes:
+        loss_fn (nn.Module): The loss function used for training.
+        optimizer (Optimizer): The optimizer used for updating the model's parameters.
     """
 
     def __init__(
         self,
         model: nn.Module,
+        loss_fn: nn.Module,
+        optimizer: Optimizer,
         device: Optional[torch.device] = None,
         log: bool = False,
     ):
+
         self.model = model
+        self.loss_fn = loss_fn
+        self.optimizer = optimizer
 
         if device is None:
             device = model.parameters().__next__().device
         self.device = device
 
         self.logger = None if not log else SummaryWriter()
-        if self.logger is not None:
-            self.logger.add_hparams({"model": model.__class__.__name__}, {}, run_name="hparams")
-            self.logger.add_hparams({"device": str(device)}, {}, run_name="hparams")
 
-        if self.device:
-            model.to(self.device)
+        model.to(self.device)
+
+        self._log_params()
+
+    def _log_params(self):
+        if self.logger is None:
+            return
+
+        param_dict = {
+            "model": self.model.__class__.__name__,
+            "device": str(self.device),
+            "criterion": self.loss_fn.__class__.__name__,
+            "optimizer": self.optimizer.__class__.__name__,
+        }
+
+        for key, val in self.optimizer.param_groups[0].items():
+            if type(val) not in [bool, str, float, int, None]:
+                val = str(val)
+            param_dict[key] = val
+
+        param_dict.update({"params": None})
+
+        self.logger.add_hparams(
+            hparam_dict=param_dict,
+            metric_dict={},
+            run_name=f"hparams",
+        )
 
     def _make_batch_result(self, loss, num_correct) -> BatchResult:
         loss = loss.item() if isinstance(loss, Tensor) else loss
@@ -263,10 +296,6 @@ class Trainer(abc.ABC):
 
         return EpochResult(losses=losses, accuracy=accuracy)
 
-    def log_hparam(self, hparam_dict: dict[str, Any], metric_dict: dict[str, Any] = {}, run_name: str = "hparams"):
-        if self.logger is not None:
-            self.logger.add_hparams(hparam_dict, metric_dict, run_name=run_name)
-
 
 class BinaryTrainer(Trainer):
     """
@@ -290,18 +319,7 @@ class BinaryTrainer(Trainer):
         device: Optional[torch.device] = None,
         log: bool = False,
     ):
-        super().__init__(model, device, log=log)
-        self.loss_fn = loss_fn
-        self.optimizer = optimizer
-
-        if self.logger is not None:
-            self.logger.add_hparams({"loss_fn": loss_fn.__class__.__name__}, {}, run_name="hparams")
-            self.logger.add_hparams({"optimizer": optimizer.__class__.__name__}, {}, run_name="hparams")
-            optimizer_params = {}
-            for key, val in optimizer.param_groups[0].items():
-                optimizer_params[key] = str(val)
-            optimizer_params.update({"params": ""})
-            self.logger.add_hparams(optimizer_params, {}, run_name="hparams")
+        super().__init__(model=model, loss_fn=loss_fn, optimizer=optimizer, device=device, log=log)
 
     def train_batch(self, batch) -> BatchResult:
         X, y = batch
