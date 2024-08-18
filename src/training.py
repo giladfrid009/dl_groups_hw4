@@ -30,6 +30,7 @@ class Trainer(abc.ABC):
         optimizer (Optimizer): The optimizer used for updating the model's parameters.
         device (Optional[torch.device], optional): The device on which the model and data should be loaded.
         log (bool, optional): Whether to log training progress with tensorboard.
+        log_dir (Optional[str], optional): Directory to save tensorboard logs.
 
     Attributes:
         criterion (nn.Module): The loss function used for training.
@@ -43,6 +44,7 @@ class Trainer(abc.ABC):
         optimizer: Optimizer,
         device: Optional[torch.device] = None,
         log: bool = False,
+        log_dir: Optional[str] = None,
     ):
 
         self.model = model
@@ -53,7 +55,7 @@ class Trainer(abc.ABC):
             device = model.parameters().__next__().device
         self.device = device
 
-        self.logger = None if not log else SummaryWriter()
+        self.logger = None if not log else SummaryWriter(log_dir=log_dir)
 
         model.to(self.device)
 
@@ -93,6 +95,12 @@ class Trainer(abc.ABC):
         test_losses = [x.item() if isinstance(x, Tensor) else x for x in test_losses]
         test_acc = [x.item() if isinstance(x, Tensor) else x for x in test_acc]
         return FitResult(int(num_epochs), train_losses, train_acc, test_losses, test_acc)
+
+    def _elapsed_time_str(self, start_time: float) -> str:
+        elapsed_seconds = time.time() - start_time
+        hours, remainder = divmod(int(elapsed_seconds), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     def fit(
         self,
@@ -139,7 +147,8 @@ class Trainer(abc.ABC):
             if print_every > 0 and (epoch % print_every == 0 or epoch == num_epochs - 1):
                 verbose = True
 
-            self._print(f"--- EPOCH {epoch+1}/{num_epochs} ---", verbose)
+            elapsed_str = self._elapsed_time_str(start_time)
+            self._print(f"--- EPOCH {epoch+1}/{num_epochs} --- (time: {elapsed_str})", verbose)
 
             train_result = self.train_epoch(dl_train, verbose=verbose, **kw)
             test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
@@ -166,9 +175,12 @@ class Trainer(abc.ABC):
             else:
                 epochs_without_improvement += 1
                 if early_stopping is not None and epochs_without_improvement >= early_stopping:
+                    print(f"--- Stopping after {epoch+1} epochs :: no improvement for {early_stopping} epochs ---")
                     break
 
             if time_limit is not None and time.time() - start_time > time_limit:
+                elapsed_str = self._elapsed_time_str(start_time)
+                print(f"--- Stopping after {epoch+1} epochs :: time limit exceeded {elapsed_str} --- ")
                 break
 
         return self._make_fit_result(actual_epoch_num, train_loss, train_acc, test_loss, test_acc)
@@ -311,6 +323,7 @@ class BinaryTrainer(Trainer):
         optimizer (Optimizer): The optimizer used for updating the model's parameters.
         device (Optional[torch.device], optional): The device on which the model and data should be loaded.
         log (bool, optional): Whether to log training progress with tensorboard.
+        log_dir (Optional[str], optional): Directory to save tensorboard logs.
 
     Attributes:
         criterion (nn.Module): The loss function used for training.
@@ -324,8 +337,16 @@ class BinaryTrainer(Trainer):
         optimizer: Optimizer,
         device: Optional[torch.device] = None,
         log: bool = False,
+        log_dir: Optional[str] = None,
     ):
-        super().__init__(model=model, criterion=criterion, optimizer=optimizer, device=device, log=log)
+        super().__init__(
+            model=model,
+            criterion=criterion,
+            optimizer=optimizer,
+            device=device,
+            log=log,
+            log_dir=log_dir,
+        )
 
     def train_batch(self, batch) -> BatchResult:
         X, y = batch
