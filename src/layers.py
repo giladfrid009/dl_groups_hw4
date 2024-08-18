@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 from torch import nn
 
-
+# TODO: are we invariant on the correct dimension?
 class LinearEquivariant(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         """
@@ -50,6 +50,7 @@ class LinearEquivariant(nn.Module):
         return reduced
 
 
+# TODO: are we invariant on the correct dimension?
 class LinearInvariant(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         """
@@ -94,6 +95,7 @@ class LinearInvariant(nn.Module):
         return reduced
 
 
+# TODO: are we encoding the correct dimension?
 class PositionalEncoding(nn.Module):
 
     def __init__(self, d_model: int, max_len: int = 5000):

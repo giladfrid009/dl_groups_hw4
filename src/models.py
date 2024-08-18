@@ -6,6 +6,7 @@ from torch import nn, Tensor
 from src.permutation import Permutation
 
 
+# TODO: are we invariant on the correct dimension?
 class CanonicalModel(nn.Module):
     def __init__(self, model: nn.Module) -> None:
         super().__init__()
@@ -16,6 +17,7 @@ class CanonicalModel(nn.Module):
         return self.model(x)
 
 
+# TODO: are we invariant on the correct dimension?
 class SymmetryModel(nn.Module):
     def __init__(
         self,
@@ -69,6 +71,7 @@ class SymmetryModel(nn.Module):
         return result
 
 
+# TODO: are we invariant on the correct dimension?
 def test_invariant(
     model: nn.Module,
     input: Tensor,
@@ -99,6 +102,7 @@ def test_invariant(
     return True
 
 
+# TODO: are we invariant on the correct dimension?
 def test_equivariant(
     model: nn.Module,
     input: Tensor,

@@ -6,6 +6,7 @@ from torch import Tensor
 from torch import nn
 
 
+# TODO: are we permuting the correct dimension?
 class Permutation(nn.Module):
     def __init__(self, perm: torch.Tensor) -> None:
         super().__init__()
