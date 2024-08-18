@@ -22,7 +22,7 @@ class Permutation(nn.Module):
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Permutation):
-            return torch.all(self.perm == other.perm)
+            return torch.equal(self.perm, other.perm)
         return False
 
     def __ne__(self, value: object) -> bool:

@@ -1,15 +1,16 @@
 import os
 import abc
 import sys
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional
 import tqdm.auto
 from torch import Tensor
-from typing import Any, Tuple, Callable, Optional
-from torch.optim import Optimizer
+from typing import Any, Callable, Optional
+from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard.writer import SummaryWriter
 
 from src.train_results import FitResult, BatchResult, EpochResult
 
@@ -25,27 +26,27 @@ class Trainer(abc.ABC):
 
     Args:
         model (nn.Module): The model to be trained.
-        loss_fn (nn.Module): The loss function used for training.
+        criterion (nn.Module): The loss function used for training.
         optimizer (Optimizer): The optimizer used for updating the model's parameters.
         device (Optional[torch.device], optional): The device on which the model and data should be loaded.
         log (bool, optional): Whether to log training progress with tensorboard.
 
     Attributes:
-        loss_fn (nn.Module): The loss function used for training.
+        criterion (nn.Module): The loss function used for training.
         optimizer (Optimizer): The optimizer used for updating the model's parameters.
     """
 
     def __init__(
         self,
         model: nn.Module,
-        loss_fn: nn.Module,
+        criterion: nn.Module,
         optimizer: Optimizer,
         device: Optional[torch.device] = None,
         log: bool = False,
     ):
 
         self.model = model
-        self.loss_fn = loss_fn
+        self.criterion = criterion
         self.optimizer = optimizer
 
         if device is None:
@@ -65,7 +66,7 @@ class Trainer(abc.ABC):
         param_dict = {
             "model": self.model.__class__.__name__,
             "device": str(self.device),
-            "criterion": self.loss_fn.__class__.__name__,
+            "criterion": self.criterion.__class__.__name__,
             "optimizer": self.optimizer.__class__.__name__,
         }
 
@@ -73,8 +74,6 @@ class Trainer(abc.ABC):
             if type(val) not in [bool, str, float, int, None]:
                 val = str(val)
             param_dict[key] = val
-
-        param_dict.update({"params": None})
 
         self.logger.add_hparams(
             hparam_dict=param_dict,
@@ -100,8 +99,9 @@ class Trainer(abc.ABC):
         dl_train: DataLoader,
         dl_test: DataLoader,
         num_epochs: int,
-        checkpoints: str = None,
-        early_stopping: int = None,
+        checkpoints: Optional[str] = None,
+        early_stopping: Optional[int] = None,
+        time_limit: Optional[int] = None,
         print_every: int = 1,
         **kw,
     ) -> FitResult:
@@ -115,6 +115,7 @@ class Trainer(abc.ABC):
             num_epochs (int): Number of epochs to train for.
             checkpoints (str, optional): Whether to save model to file every time the test set accuracy improves. Should be a string containing a filename without extension.
             early_stopping (int, optional): Whether to stop training early if there is no test loss improvement for this number of epochs.
+            time_limit (int, optional): Stop training after this many seconds.
             print_every (int, optional): Print progress every this number of epochs.
 
         Returns:
@@ -128,6 +129,8 @@ class Trainer(abc.ABC):
         # add graph to tensorboard
         if self.logger is not None:
             self.logger.add_graph(self.model, next(iter(dl_train))[0])
+
+        start_time = time.time()
 
         for epoch in range(num_epochs):
             actual_epoch_num += 1
@@ -145,6 +148,7 @@ class Trainer(abc.ABC):
             train_acc.append(train_result.accuracy)
             test_loss.extend(test_result.losses)
             test_acc.append(test_result.accuracy)
+
             # log results to tensorboard
             if self.logger is not None:
                 self.logger.add_scalar("loss/train", Tensor(train_result.losses).mean(), epoch)
@@ -163,6 +167,9 @@ class Trainer(abc.ABC):
                 epochs_without_improvement += 1
                 if early_stopping is not None and epochs_without_improvement >= early_stopping:
                     break
+
+            if time_limit is not None and time.time() - start_time > time_limit:
+                break
 
         return self._make_fit_result(actual_epoch_num, train_loss, train_acc, test_loss, test_acc)
 
@@ -242,7 +249,6 @@ class Trainer(abc.ABC):
 
     @staticmethod
     def _print(message, verbose=True):
-        """Simple wrapper around print to make it conditional"""
         if verbose:
             print(message)
 
@@ -301,25 +307,25 @@ class BinaryTrainer(Trainer):
     """
     Args:
         model (nn.Module): The model to be trained.
-        loss_fn (nn.Module): The loss function used for training.
+        criterion (nn.Module): The loss function used for training.
         optimizer (Optimizer): The optimizer used for updating the model's parameters.
         device (Optional[torch.device], optional): The device on which the model and data should be loaded.
         log (bool, optional): Whether to log training progress with tensorboard.
 
     Attributes:
-        loss_fn (nn.Module): The loss function used for training.
+        criterion (nn.Module): The loss function used for training.
         optimizer (Optimizer): The optimizer used for updating the model's parameters.
     """
 
     def __init__(
         self,
         model: nn.Module,
-        loss_fn: nn.Module,
+        criterion: nn.Module,
         optimizer: Optimizer,
         device: Optional[torch.device] = None,
         log: bool = False,
     ):
-        super().__init__(model=model, loss_fn=loss_fn, optimizer=optimizer, device=device, log=log)
+        super().__init__(model=model, criterion=criterion, optimizer=optimizer, device=device, log=log)
 
     def train_batch(self, batch) -> BatchResult:
         X, y = batch
@@ -327,11 +333,10 @@ class BinaryTrainer(Trainer):
             X = X.to(self.device)
             y = y.to(self.device)
 
-        self.model: nn.Module
         self.optimizer.zero_grad()
-        preds: torch.Tensor = self.model.forward(X)
+        preds: Tensor = self.model(X)
         preds = preds.flatten()
-        loss = self.loss_fn(preds, y)
+        loss: Tensor = self.criterion(preds, y)
         loss.backward()
         self.optimizer.step()
 
@@ -346,10 +351,10 @@ class BinaryTrainer(Trainer):
             X = X.to(self.device)
             y = y.to(self.device)
 
-        preds: torch.Tensor = self.model.forward(X)
+        preds: torch.Tensor = self.model(X)
         preds = preds.flatten()
 
-        loss = self.loss_fn(preds, y)
+        loss = self.criterion(preds, y)
         num_correct = torch.sum((preds > 0.5) == y)
 
         return self._make_batch_result(loss, num_correct)

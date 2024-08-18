@@ -1,9 +1,10 @@
 import math
 import torch
 from torch import Tensor
+from torch.utils.data import Dataset
 
 
-class GaussianDataset(torch.utils.data.Dataset):
+class GaussianDataset(Dataset):
     def __init__(
         self,
         num_samples: int,

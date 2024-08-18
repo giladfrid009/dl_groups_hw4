@@ -20,7 +20,7 @@ class SymmetryModel(nn.Module):
     def __init__(
         self,
         model: nn.Module,
-        perm_creator: Callable[[None], Iterator[Permutation]],
+        perm_creator: Callable[[], Iterator[Permutation]],
         chunksize: int = 1,
     ) -> None:
         super().__init__()
@@ -47,7 +47,7 @@ class SymmetryModel(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         total = 0
-        result = None
+        result: Tensor | None = None
 
         perms = self.perm_creator()
         for perm_chunk in self._chunk(perms, self.chunksize):
