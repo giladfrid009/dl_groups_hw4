@@ -23,8 +23,8 @@ class GaussianDataset(Dataset):
 
         if static:
             var = var1 * (self.labels == 0) + var2 * (self.labels == 1)
-            data = torch.randn(num_samples, *shape)
-            self.data = torch.swapaxes(data.swapaxes(0, -1) * torch.sqrt(var), 0, -1)
+            var = var.view(num_samples, *([1] * len(shape)))
+            self.data = torch.randn(size=(num_samples, *shape)) * torch.sqrt(var)
 
     def __len__(self) -> int:
         return len(self.labels)

@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 from torch import nn
 
-# TODO: are we invariant on the correct dimension?
+
 class LinearEquivariant(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         """
@@ -17,40 +17,48 @@ class LinearEquivariant(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.bias = torch.nn.Parameter(torch.randn(in_channels, out_channels))
-        self.alpha = torch.nn.Parameter(torch.randn(in_channels, out_channels))
-        self.beta = torch.nn.Parameter(torch.randn(in_channels, out_channels))
+        self.bias = nn.Parameter(torch.randn(in_channels, out_channels))
+        self.alpha = nn.Parameter(torch.randn(in_channels, out_channels))
+        self.beta = nn.Parameter(torch.randn(in_channels, out_channels))
+
+        range = 1 / math.sqrt(in_channels)
+        nn.init.uniform_(self.alpha, -range, range)
+        nn.init.uniform_(self.beta, -range, range)
+        nn.init.uniform_(self.bias, -range, range)
 
     def forward(self, x: Tensor) -> Tensor:
         """
-        Forward pass of the LinearEquivariant module.
+        Performs linear equivariant transformation on the input tensor.
+
+        Data dimensions:
+        * B is batch size
+        * N is sequence length
 
         Args:
-            x (Tensor): Input tensor of shape (batch_size, d, in_channels).
+            x (Tensor): Input tensor of shape (B, N, in_channels).
 
         Returns:
-            Tensor: Output tensor of shape (batch_size, d, out_channels).
+            Tensor: Output tensor of shape (B, N, out_channels).
         """
 
         assert x.ndim == 3
         assert x.shape[-1] == self.in_channels
 
-        # shape (batch_size, d, in_channels, 1)
+        # shape (B, N, in_channels, 1)
         x = x.unsqueeze(-1)
 
-        # shape (batch_size, 1, in_channels, 1)
+        # shape (B, 1, in_channels, 1)
         x_sum = torch.sum(x, dim=1, keepdim=True)
 
-        # shape (batch_size, d, in_channels, out_channels)
+        # shape (B, N, in_channels, out_channels)
         all = x * self.alpha + x_sum * self.beta + self.bias
 
-        # shape (batch_size, d, out_channels)
-        reduced = torch.mean(all, dim=2)
+        # shape (B, N, out_channels)
+        reduced = torch.sum(all, dim=2)
 
         return reduced
 
 
-# TODO: are we invariant on the correct dimension?
 class LinearInvariant(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         """
@@ -64,38 +72,46 @@ class LinearInvariant(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.bias = torch.nn.Parameter(torch.randn(in_channels, out_channels))
-        self.alpha = torch.nn.Parameter(torch.randn(in_channels, out_channels))
+        self.bias = nn.Parameter(torch.randn(in_channels, out_channels))
+        self.alpha = nn.Parameter(torch.randn(in_channels, out_channels))
+
+        range = 1 / math.sqrt(in_channels)
+        nn.init.uniform_(self.alpha, -range, range)
+        nn.init.uniform_(self.bias, -range, range)
 
     def forward(self, x: Tensor) -> Tensor:
         """
-        Forward pass of the LinearInvariant module.
+        Performs linear invariant transformation on the input tensor.
+
+        Data dimensions:
+        * B is batch size
+        * N is sequence length
 
         Args:
-            x (Tensor): Input tensor of shape (batch_size, d, in_channels).
+            x (Tensor): Input tensor of shape (B, N, in_channels).
 
         Returns:
-            Tensor: Output tensor of shape (batch_size, 1, out_channels).
+            Tensor: Output tensor of shape (B, 1, out_channels).
         """
+
         assert x.ndim == 3
         assert x.shape[-1] == self.in_channels
 
-        # shape (batch_size, d, in_channels, 1)
+        # shape (B, N, in_channels, 1)
         x = x.unsqueeze(-1)
 
-        # shape (batch_size, 1, in_channels, 1)
+        # shape (B, 1, in_channels, 1)
         x_sum = torch.sum(x, dim=1, keepdim=True)
 
-        # shape (batch_size, 1, in_channels, out_channels)
+        # shape (B, 1, in_channels, out_channels)
         all = x_sum * self.alpha + self.bias
 
-        # shape (batch_size, 1, out_channels)
-        reduced = torch.mean(all, dim=2)
+        # shape (B, 1, out_channels)
+        reduced = torch.sum(all, dim=2)
 
         return reduced
 
 
-# TODO: are we encoding the correct dimension?
 class PositionalEncoding(nn.Module):
 
     def __init__(self, d_model: int, max_len: int = 5000):
@@ -121,13 +137,19 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         """
-        Forward pass of the PositionalEncoding module.
+        Applies positional encoding to the input tensor.
+
+        Data dimensions:
+        * B is batch size
+        * N is sequence length
+        * D is feature / channel dimension
 
         Args:
-            x (Tensor): Input tensor of shape (batch_size, d, in_channels).
+            x (Tensor): Input tensor of shape (B, N, D).
 
         Returns:
-            Tensor: Output tensor of shape (batch_size, d, in_channels).
+            Tensor: Output tensor of shape (B, N, D) with positional encoding applied.
         """
+
         x = x + self.pe[:, : x.size(1), :]
         return x

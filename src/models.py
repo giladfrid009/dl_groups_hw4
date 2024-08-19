@@ -6,18 +6,57 @@ from torch import nn, Tensor
 from src.permutation import Permutation
 
 
-# TODO: are we invariant on the correct dimension?
 class CanonicalModel(nn.Module):
     def __init__(self, model: nn.Module) -> None:
         super().__init__()
         self.model = model
 
     def forward(self, x: Tensor) -> Tensor:
-        x = torch.sort(x, dim=1, descending=True).values
+        """
+        Data dimensions:
+        * B is batch size
+        * N is sequence length
+        * D is feature / channel dimension
+
+        Args:
+            x (Tensor): Input tensor of shape (B, N, D).
+
+        Returns:
+            Tensor: Output tensor of varied dimensionality, dependent on the internal model.
+        """
+        x = self.canonize(x)
         return self.model(x)
 
+    def canonize(self, x: Tensor) -> Tensor:
+        """
+        Transforms the input tensor into a canonical form.
 
-# TODO: are we invariant on the correct dimension?
+        Data dimensions:
+        * B is batch size
+        * N is sequence length
+        * D is feature / channel dimension
+
+        Args:
+            x (Tensor): Input tensor of shape (B, N, D).
+
+        Returns:
+            Tensor: Output tensor of shape (B, N, D).
+        """
+        B, N, D = x.shape
+
+        # extract data from each sequence element features
+        sort_key = x[..., 0] + x.sum(dim=-1)
+
+        # sort sequence elements by the extracted data
+        row_idx = torch.argsort(sort_key, dim=-1)
+
+        batch_idx = torch.arange(B).unsqueeze(1).broadcast_to(B, N)
+
+        x = x[batch_idx, row_idx]
+
+        return x
+
+
 class SymmetryModel(nn.Module):
     def __init__(
         self,
@@ -48,6 +87,19 @@ class SymmetryModel(nn.Module):
             yield list(buffer)
 
     def forward(self, x: Tensor) -> Tensor:
+        """
+        Data dimensions:
+        * B is batch size
+        * N is sequence length
+        * D is feature / channel dimension
+
+        Args:
+            x (Tensor): Input tensor of shape (B, N, D).
+
+        Returns:
+            Tensor: Output tensor of varied dimensionality, dependent on the internal model.
+        """
+
         total = 0
         result: Tensor | None = None
 
@@ -71,7 +123,6 @@ class SymmetryModel(nn.Module):
         return result
 
 
-# TODO: are we invariant on the correct dimension?
 def test_invariant(
     model: nn.Module,
     input: Tensor,
@@ -102,7 +153,6 @@ def test_invariant(
     return True
 
 
-# TODO: are we invariant on the correct dimension?
 def test_equivariant(
     model: nn.Module,
     input: Tensor,
@@ -111,7 +161,7 @@ def test_equivariant(
     tolerance: float = 1e-3,
 ) -> bool:
 
-    assert input.ndim == 3, "Input must be of shape (batch, channels, features)"
+    assert input.ndim == 3, "Input must be of shape (B, N, D)"
 
     if device is None:
         device = model.parameters().__next__().device

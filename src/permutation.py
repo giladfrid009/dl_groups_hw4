@@ -6,13 +6,11 @@ from torch import Tensor
 from torch import nn
 
 
-# TODO: are we permuting the correct dimension?
 class Permutation(nn.Module):
     def __init__(self, perm: torch.Tensor) -> None:
         super().__init__()
 
         perm = perm.detach().clone()
-
         self.register_buffer("perm", perm, persistent=False)
         self.hash = hash(tuple(perm.tolist()))
 
@@ -38,7 +36,7 @@ class Permutation(nn.Module):
 
 def create_all_permutations(perm_length: int) -> Iterator[Permutation]:
     for perm in itertools.permutations(range(perm_length)):
-        yield Permutation(torch.tensor(perm, dtype=torch.long))
+        yield Permutation(torch.tensor(perm, dtype=torch.int32))
 
 
 def create_permutations_from_generators(generators: list[Permutation]) -> Iterator[Permutation]:
