@@ -1,4 +1,6 @@
 import math
+import time
+import statistics
 from typing import Iterable
 import torch
 from torch import Tensor
@@ -51,7 +53,7 @@ def create_invariant_model(n: int, d: int) -> nn.Module:
     )
 
 
-def get_training_models(n: int, d: int) -> Iterable[tuple[nn.Module, str]]:
+def get_models(n: int, d: int) -> Iterable[tuple[nn.Module, str]]:
 
     # Canonical models
 
@@ -124,12 +126,88 @@ def get_training_models(n: int, d: int) -> Iterable[tuple[nn.Module, str]]:
     yield model, model_name
 
 
-def run_experiments(train_size: int, seq_len: int, device: torch.device | None = None) -> None:
+def measure_inference_time(model: nn.Module, input: Tensor, device: torch.device, iters: int = 100) -> float:
+    model = model.to(device)
+    input = input.to(device)
+    model.eval()
+
+    with torch.inference_mode():
+        # Warm-up runs
+        for _ in range(10):
+            _ = model(input)
+
+        # Multiple iterations
+        inference_times = []
+        for _ in range(iters):
+            start_time = time.time()
+            output = model(input)
+            end_time = time.time()
+            inference_times.append(end_time - start_time)
+
+    average_time = statistics.mean(inference_times)
+    return average_time
+
+
+def measure_training_time(model: nn.Module, input: Tensor, device: torch.device, iters: int = 100) -> float:
+    model = model.to(device)
+    input = input.to(device)
+    model.train()
+
+    with torch.enable_grad():
+        # Warm-up runs
+        for _ in range(10):
+            model.zero_grad()
+            output: Tensor = model(input)
+            output.sum().backward()
+
+        # Multiple iterations
+        backward_times = []
+        for _ in range(iters):
+            model.zero_grad()
+            start_time = time.time()
+            output = model(input)
+            output.sum().backward()
+            end_time = time.time()
+            backward_times.append(end_time - start_time)
+
+    average_time = statistics.mean(backward_times)
+    return average_time
+
+
+def run_time_benchmarks(seq_len: int, feature_dim: int, device: torch.device | None = None) -> None:
+    if device is None:
+        device = torch.device("cpu")
+
+    input = torch.randn(5, seq_len, feature_dim).to(device)
+
+    for model, model_name in get_models(seq_len, feature_dim):
+        inference_time = measure_inference_time(model=model, input=input, device=device, iters=100)
+        training_time = measure_training_time(model=model, input=input, device=device, iters=100)
+        print(f"Model {model_name} inference time: {inference_time:.4f} seconds")
+        print(f"Model {model_name} training time : {training_time:.4f} seconds")
+
+
+def run_invariance_test(seq_len: int, feature_dim: int, device: torch.device | None = None) -> None:
+    if device is None:
+        device = torch.device("cpu")
+
+    for model, model_name in get_models(seq_len, feature_dim):
+
+        invariant = test_invariant(
+            model=model,
+            input=torch.randn(5, seq_len, feature_dim),
+            device=device,
+            test_rounds=10,
+        )
+
+        print(f"Model {model_name} is invariant: {invariant}")
+
+
+def run_experiments(seq_len: int, feature_dim: int, train_size: int, device: torch.device | None = None) -> None:
 
     if device is None:
         device = torch.device("cpu")
 
-    feature_dim = 5
     test_size = 1000
 
     ds_train = GaussianDataset(num_samples=train_size, shape=(seq_len, feature_dim), var1=1.0, var2=0.8, static=False)
@@ -138,7 +216,7 @@ def run_experiments(train_size: int, seq_len: int, device: torch.device | None =
     dl_train = DataLoader(dataset=ds_train, batch_size=32, shuffle=False)
     dl_test = DataLoader(dataset=ds_test, batch_size=32, shuffle=False)
 
-    for model, model_name in get_training_models(seq_len, feature_dim):
+    for model, model_name in get_models(seq_len, feature_dim):
 
         print(f"Training model: {model_name}\n\n")
 
@@ -161,11 +239,7 @@ def run_experiments(train_size: int, seq_len: int, device: torch.device | None =
         )
 
         print("\n\n#################")
-
-        print(f"Training complete. Test loss: {fit_result.test_loss[-1]}")
-
-        invariant = test_invariant(model, torch.randn(5, seq_len, feature_dim), device=device)
-
-        print(f"Model {model_name} is invariant: {invariant}")
-
+        print("Training complete.")
+        print(f"Final Test loss    : {fit_result.test_loss[-1]}")
+        print(f"Final Test accuracy: {fit_result.test_acc[-1]}")
         print("#################\n\n")
