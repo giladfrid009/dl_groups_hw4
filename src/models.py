@@ -139,7 +139,9 @@ def test_invariant(
     model = model.to(device)
     input = input.to(device)
 
-    model.eval()
+    old_status = model.training
+    model.train(False)
+
     with torch.no_grad():
         for _ in range(test_rounds):
             perm = Permutation(torch.randperm(input.shape[1]))
@@ -148,8 +150,10 @@ def test_invariant(
             out2 = model(input)
 
             if not torch.allclose(out1, out2, atol=tolerance):
+                model.train(old_status)
                 return False
 
+    model.train(old_status)
     return True
 
 
@@ -169,7 +173,9 @@ def test_equivariant(
     model = model.to(device)
     input = input.to(device)
 
-    model.eval()
+    old_status = model.training
+    model.train(False)
+
     with torch.no_grad():
         for _ in range(test_rounds):
             perm = Permutation(torch.randperm(input.shape[1]))
@@ -178,6 +184,8 @@ def test_equivariant(
             out2 = perm(model(input))
 
             if not torch.allclose(out1, out2, atol=tolerance):
+                model.train(old_status)
                 return False
 
+    model.train(old_status)
     return True

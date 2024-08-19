@@ -34,6 +34,33 @@ class Permutation(nn.Module):
         return self.hash
 
 
+class RandomPermute(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Randomly permute the input tensor along the sequence dimension.
+
+        Data dimensions:
+        * B is batch size
+        * N is sequence length
+        * D is feature / channel dimension
+
+        Args:
+            x (Tensor): Input tensor of shape (B, N, D).
+
+        Returns:
+            Tensor: If training, returns a randomly permuted tensor of shape (B, N, D) along dimension 1.
+                Otherwise, returns the input tensor.
+        """
+        if self.training is False:
+            return x
+
+        perm = torch.randperm(x.shape[1])
+        return x[:, perm]
+
+
 def create_all_permutations(perm_length: int) -> Iterator[Permutation]:
     for perm in itertools.permutations(range(perm_length)):
         yield Permutation(torch.tensor(perm, dtype=torch.int32))
