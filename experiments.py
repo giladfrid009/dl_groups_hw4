@@ -1,6 +1,6 @@
 import math
 import time
-import statistics
+from tqdm.auto import tqdm
 from typing import Iterable
 import torch
 from torch import Tensor
@@ -126,65 +126,85 @@ def get_models(n: int, d: int) -> Iterable[tuple[nn.Module, str]]:
     yield model, model_name
 
 
-def measure_inference_time(model: nn.Module, input: Tensor, device: torch.device, iters: int = 100) -> float:
+def measure_inference_time(model: nn.Module, input: Tensor, device: torch.device, repeats: int) -> float:
     model = model.to(device)
     input = input.to(device)
     model.eval()
 
     with torch.inference_mode():
+
         # Warm-up runs
         for _ in range(10):
             _ = model(input)
 
-        # Multiple iterations
-        inference_times = []
-        for _ in range(iters):
-            start_time = time.time()
+        min_time = float("inf")
+
+        for _ in tqdm(range(repeats), leave=False):
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+
+            start_time = time.perf_counter()
             output = model(input)
-            end_time = time.time()
-            inference_times.append(end_time - start_time)
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            end_time = time.perf_counter()
 
-    average_time = statistics.mean(inference_times)
-    return average_time
+            exec_time = end_time - start_time
+            min_time = min(min_time, exec_time)
+
+    return min_time
 
 
-def measure_training_time(model: nn.Module, input: Tensor, device: torch.device, iters: int = 100) -> float:
+def measure_training_time(model: nn.Module, input: Tensor, device: torch.device, repeats: int) -> float:
     model = model.to(device)
     input = input.to(device)
     model.train()
 
     with torch.enable_grad():
+
         # Warm-up runs
         for _ in range(10):
             model.zero_grad()
             output: Tensor = model(input)
             output.sum().backward()
 
-        # Multiple iterations
-        backward_times = []
-        for _ in range(iters):
+        min_time = float("inf")
+
+        for _ in tqdm(range(repeats), leave=False):
             model.zero_grad()
-            start_time = time.time()
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+
+            start_time = time.perf_counter()
             output = model(input)
             output.sum().backward()
-            end_time = time.time()
-            backward_times.append(end_time - start_time)
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            end_time = time.perf_counter()
 
-    average_time = statistics.mean(backward_times)
-    return average_time
+            exec_time = end_time - start_time
+            min_time = min(min_time, exec_time)
+
+    return min_time
 
 
-def run_time_benchmarks(seq_len: int, feature_dim: int, device: torch.device | None = None) -> None:
+def run_time_benchmarks(
+    seq_len: int,
+    feature_dim: int,
+    device: torch.device | None = None,
+    input_batch: int = 32,
+    repeats: int = 1000,
+) -> None:
     if device is None:
         device = torch.device("cpu")
 
-    input = torch.randn(5, seq_len, feature_dim).to(device)
+    input = torch.randn(input_batch, seq_len, feature_dim).to(device)
 
     for model, model_name in get_models(seq_len, feature_dim):
-        inference_time = measure_inference_time(model=model, input=input, device=device, iters=100)
-        training_time = measure_training_time(model=model, input=input, device=device, iters=100)
-        print(f"Model {model_name} inference time: {inference_time:.4f} seconds")
-        print(f"Model {model_name} training time : {training_time:.4f} seconds")
+        inference_time = measure_inference_time(model=model, input=input, device=device, repeats=repeats)
+        training_time = measure_training_time(model=model, input=input, device=device, repeats=repeats)
+        print(f"Model {model_name} inference time: {inference_time:.8f} seconds")
+        print(f"Model {model_name} training time : {training_time:.8f} seconds")
 
 
 def run_invariance_test(seq_len: int, feature_dim: int, device: torch.device | None = None) -> None:

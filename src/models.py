@@ -3,7 +3,7 @@ from collections import deque
 import torch
 from torch import nn, Tensor
 
-from src.permutation import Permutation
+from src.permutation import Permutation, RandomPermute
 
 
 class CanonicalModel(nn.Module):
@@ -176,10 +176,10 @@ def test_equivariant(
     old_status = model.training
     model.train(False)
 
+    perm = RandomPermute()
+
     with torch.no_grad():
         for _ in range(test_rounds):
-            perm = Permutation(torch.randperm(input.shape[1]))
-
             out1 = model(perm(input))
             out2 = perm(model(input))
 
