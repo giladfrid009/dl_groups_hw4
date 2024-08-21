@@ -61,12 +61,12 @@ class SymmetryModel(nn.Module):
     def __init__(
         self,
         model: nn.Module,
-        perm_creator: Callable[[], Iterator[Permutation]],
+        perms: list[Permutation],
         chunksize: int = 1,
     ) -> None:
         super().__init__()
         self.model = model
-        self.perm_creator = perm_creator
+        self.perms = perms
         self.chunksize = chunksize
 
     def _chunk(self, data: Iterable[Permutation], chunksize: int) -> Iterable[list[Permutation]]:
@@ -103,8 +103,7 @@ class SymmetryModel(nn.Module):
         total = 0
         result: Tensor | None = None
 
-        perms = self.perm_creator()
-        for perm_chunk in self._chunk(perms, self.chunksize):
+        for perm_chunk in self._chunk(self.perms, self.chunksize):
             chunksize = len(perm_chunk)
             total += chunksize
             permuted = torch.vstack([perm(x) for perm in perm_chunk])

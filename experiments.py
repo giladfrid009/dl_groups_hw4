@@ -67,18 +67,20 @@ def get_models(n: int, d: int) -> Iterable[tuple[nn.Module, str]]:
 
     # Symmetry models
 
-    """ shift_perm = Permutation((torch.arange(n) + 1) % n)
-    model = SymmetryModel(
+    # commented out since the model is too slow, so we dont want to run experiments on it
+    # additionally, even creating the permutations is very slow, because there are n! permutations
+
+    """ model = SymmetryModel(
         model=create_mlp_model(n, d),
-        perm_creator=lambda: create_permutations_from_generators([shift_perm]),
+        perms=list(create_all_permutations(n)),
         chunksize=10,
     )
     model_name = "symmetry-mlp"
-    yield model, model_name
+    yield model, model_name """
 
-    model = SymmetryModel(
+    """ model = SymmetryModel(
         model=create_transformer_model(n, d),
-        perm_creator=lambda: create_permutations_from_generators([shift_perm]),
+        perms=list(create_all_permutations(n)),
         chunksize=10,
     )
     model_name = "symmetry-attn"
@@ -89,7 +91,7 @@ def get_models(n: int, d: int) -> Iterable[tuple[nn.Module, str]]:
     num_perms = 10
     model = SymmetryModel(
         model=create_mlp_model(n, d),
-        perm_creator=lambda: (Permutation(torch.randperm(n)) for _ in range(num_perms)),
+        perms=[Permutation(torch.randperm(n)) for _ in range(num_perms)],
         chunksize=10,
     )
     model_name = "symmetry-sampling-mlp"
@@ -97,7 +99,7 @@ def get_models(n: int, d: int) -> Iterable[tuple[nn.Module, str]]:
 
     model = SymmetryModel(
         model=create_transformer_model(n, d),
-        perm_creator=lambda: (Permutation(torch.randperm(n)) for _ in range(num_perms)),
+        perms=[Permutation(torch.randperm(n)) for _ in range(num_perms)],
         chunksize=10,
     )
     model_name = "symmetry-sampling-attn"
@@ -207,20 +209,44 @@ def run_time_benchmarks(
         print(f"Model {model_name} training time : {training_time:.8f} seconds")
 
 
-def run_invariance_test(seq_len: int, feature_dim: int, device: torch.device | None = None) -> None:
+def run_invariance_tests(seq_len: int, feature_dim: int, device: torch.device | None = None) -> None:
     if device is None:
         device = torch.device("cpu")
+
+    input = torch.randn(5, seq_len, feature_dim).to(device)
 
     for model, model_name in get_models(seq_len, feature_dim):
 
         invariant = test_invariant(
             model=model,
-            input=torch.randn(5, seq_len, feature_dim),
+            input=input,
             device=device,
             test_rounds=10,
         )
 
         print(f"Model {model_name} is invariant: {invariant}")
+
+    equiv_layer = LinearEquivariant(in_channels=feature_dim, out_channels=feature_dim)
+
+    equivariant = test_equivariant(
+        model=equiv_layer,
+        input=input,
+        device=device,
+        test_rounds=10,
+    )
+
+    print(f"Layer LinearEquivariant is equivariant: {equivariant}")
+
+    inv_layer = LinearInvariant(in_channels=feature_dim, out_channels=1)
+
+    invariant = test_invariant(
+        model=inv_layer,
+        input=input,
+        device=device,
+        test_rounds=10,
+    )
+
+    print(f"Layer LinearInvariant is invariant: {invariant}")
 
 
 def run_experiments(seq_len: int, feature_dim: int, train_size: int, device: torch.device | None = None) -> None:
