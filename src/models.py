@@ -127,10 +127,10 @@ def test_invariant(
     input: Tensor,
     device: torch.device | None = None,
     test_rounds: int = 5,
-    tolerance: float = 1e-3,
+    tolerance: float = 1e-5,
 ) -> bool:
 
-    assert input.ndim == 3, "Input must be of shape (batch, channels, features)"
+    assert input.ndim == 3, "Input must be of shape (B, N, D)"
 
     if device is None:
         device = model.parameters().__next__().device
@@ -144,7 +144,6 @@ def test_invariant(
     with torch.no_grad():
         for _ in range(test_rounds):
             perm = Permutation(torch.randperm(input.shape[1]))
-
             out1 = model(perm(input))
             out2 = model(input)
 
@@ -161,7 +160,7 @@ def test_equivariant(
     input: Tensor,
     device: torch.device | None = None,
     test_rounds: int = 5,
-    tolerance: float = 1e-3,
+    tolerance: float = 1e-5,
 ) -> bool:
 
     assert input.ndim == 3, "Input must be of shape (B, N, D)"
@@ -175,10 +174,9 @@ def test_equivariant(
     old_status = model.training
     model.train(False)
 
-    perm = RandomPermute()
-
     with torch.no_grad():
         for _ in range(test_rounds):
+            perm = Permutation(torch.randperm(input.shape[1]))
             out1 = model(perm(input))
             out2 = perm(model(input))
 

@@ -222,6 +222,7 @@ def run_invariance_tests(seq_len: int, feature_dim: int, device: torch.device | 
             input=input,
             device=device,
             test_rounds=10,
+            tolerance=1e-5,
         )
 
         print(f"Model {model_name} is invariant: {invariant}")
@@ -233,6 +234,7 @@ def run_invariance_tests(seq_len: int, feature_dim: int, device: torch.device | 
         input=input,
         device=device,
         test_rounds=10,
+        tolerance=1e-5,
     )
 
     print(f"Layer LinearEquivariant is equivariant: {equivariant}")
@@ -244,6 +246,7 @@ def run_invariance_tests(seq_len: int, feature_dim: int, device: torch.device | 
         input=input,
         device=device,
         test_rounds=10,
+        tolerance=1e-5,
     )
 
     print(f"Layer LinearInvariant is invariant: {invariant}")
