@@ -1,9 +1,8 @@
-from typing import Iterable, Callable, Iterator
-from collections import deque
+from typing import Iterable
 import torch
 from torch import nn, Tensor
 
-from src.permutation import Permutation, RandomPermute
+from src.permutation import Permutation
 
 
 class CanonicalModel(nn.Module):
@@ -66,25 +65,11 @@ class SymmetryModel(nn.Module):
     ) -> None:
         super().__init__()
         self.model = model
-        self.perms = perms
+        self.perms = nn.ModuleList(perms)
         self.chunksize = chunksize
 
-    def _chunk(self, data: Iterable[Permutation], chunksize: int) -> Iterable[list[Permutation]]:
-        data_iter: Iterable[Permutation] = iter(data)
-        buffer: deque[Permutation] = deque()
-
-        while True:
-            try:
-                buffer.append(next(data_iter))
-            except StopIteration:
-                break
-
-            if len(buffer) == chunksize:
-                yield list(buffer)
-                buffer.clear()
-
-        if buffer:
-            yield list(buffer)
+    def _chunk(self, data: Iterable[nn.Module], chunksize: int) -> Iterable[list[nn.Module]]:
+        return (data[i : i + chunksize] for i in range(0, len(data), chunksize))
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -100,16 +85,14 @@ class SymmetryModel(nn.Module):
             Tensor: Output tensor of varied dimensionality, dependent on the internal model.
         """
 
-        total = 0
         result: Tensor | None = None
 
         for perm_chunk in self._chunk(self.perms, self.chunksize):
             chunksize = len(perm_chunk)
-            total += chunksize
             permuted = torch.vstack([perm(x) for perm in perm_chunk])
 
             output: Tensor = self.model.forward(permuted)
-            output = output.reshape(chunksize, output.shape[0] // chunksize, *output.shape[1:])
+            output = output.reshape(chunksize, -1, *output.shape[1:])
             output = torch.sum(output, dim=0)
 
             if result is None:
@@ -117,7 +100,7 @@ class SymmetryModel(nn.Module):
             else:
                 result = result + output
 
-        result = result / total
+        result = result / len(self.perms)
 
         return result
 

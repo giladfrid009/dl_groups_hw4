@@ -5,6 +5,8 @@ from torch import nn
 
 
 class LinearEquivariant(nn.Module):
+    __constants__ = ["in_channels", "out_channels"]
+
     def __init__(self, in_channels: int, out_channels: int) -> None:
         """
         Initializes a LinearEquivariant module.
@@ -60,6 +62,8 @@ class LinearEquivariant(nn.Module):
 
 
 class LinearInvariant(nn.Module):
+    __constants__ = ["in_channels", "out_channels"]
+
     def __init__(self, in_channels: int, out_channels: int) -> None:
         """
         Initialize the LinearInvariant module.
