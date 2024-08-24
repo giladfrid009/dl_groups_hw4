@@ -25,8 +25,7 @@ class GaussianDataset(Dataset):
         self.var2 = var2
         self.static = static
 
-        labels = torch.randint(0, 2, (num_samples,)).to(torch.float32)
-        self.labels = labels.to(device)
+        self.labels = torch.randint(0, 2, (num_samples,)).to(device, torch.float32)
 
         if static:
             var = var1 * (self.labels == 0) + var2 * (self.labels == 1)
@@ -43,7 +42,6 @@ class GaussianDataset(Dataset):
         if not self.static:
             var = self.var1 if label == 0 else self.var2
             data = torch.randn(self.shape) * math.sqrt(var)
-            data = data.to(self.device)
         else:
             data = self.data[idx]
 
