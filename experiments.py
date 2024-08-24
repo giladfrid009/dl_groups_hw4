@@ -209,6 +209,7 @@ def run_time_benchmarks(
     device: torch.device | None = None,
     input_batch: int = 32,
     repeats: int = 1000,
+    model_names: list[str] = None,
 ) -> None:
     if device is None:
         device = torch.device("cpu")
@@ -216,19 +217,31 @@ def run_time_benchmarks(
     input = torch.randn(input_batch, seq_len, feature_dim).to(device)
 
     for model, model_name in get_models(seq_len, feature_dim):
+
+        if model_names is not None and model_name not in model_names:
+            continue
+
         inference_time = measure_inference_time(model=model, input=input, device=device, repeats=repeats)
         training_time = measure_training_time(model=model, input=input, device=device, repeats=repeats)
         print(f"Model {model_name} inference time: {inference_time:.8f} seconds")
         print(f"Model {model_name} training time : {training_time:.8f} seconds")
 
 
-def run_invariance_tests(seq_len: int, feature_dim: int, device: torch.device | None = None) -> None:
+def run_invariance_tests(
+    seq_len: int,
+    feature_dim: int,
+    device: torch.device | None = None,
+    model_names: list[str] = None,
+) -> None:
     if device is None:
         device = torch.device("cpu")
 
     input = torch.randn(5, seq_len, feature_dim).to(device)
 
     for model, model_name in get_models(seq_len, feature_dim):
+
+        if model_names is not None and model_name not in model_names:
+            continue
 
         invariant = test_invariant(
             model=model,

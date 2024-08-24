@@ -16,16 +16,14 @@ class Permutation(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         if x.ndim == 1:
-            return x[self.perm]
-        return x[:, self.perm]
+            return torch.index_select(x, 0, self.perm)
+        return torch.index_select(x, 1, self.perm)
 
     def __len__(self) -> int:
         return len(self.perm)
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, Permutation):
-            return torch.equal(self.perm, other.perm)
-        return False
+        return isinstance(other, Permutation) and torch.equal(self.perm, other.perm)
 
     def __ne__(self, value: object) -> bool:
         return not self.__eq__(value)
@@ -57,8 +55,8 @@ class RandomPermute(nn.Module):
         if self.training is False:
             return x
 
-        perm = torch.randperm(x.shape[1])
-        return x[:, perm]
+        perm = torch.randperm(x.shape[1], device=x.device)
+        return torch.index_select(x, 1, perm)
 
 
 def create_all_permutations(perm_length: int) -> Iterator[Permutation]:

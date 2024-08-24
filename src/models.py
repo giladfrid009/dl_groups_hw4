@@ -27,17 +27,9 @@ class CanonicalModel(nn.Module):
         return self.model(x)
 
     def canonize(self, x: Tensor) -> Tensor:
-        B, N, D = x.shape
-
-        # extract data from each sequence element features
         sort_key = x[..., 0] + x.sum(dim=-1)
-
-        # sort sequence elements by the extracted data
         row_idx = torch.argsort(sort_key, dim=-1)
-
-        batch_idx = torch.arange(B, device=x.device).unsqueeze(1).expand(B, N)
-
-        return x[batch_idx, row_idx]
+        return torch.gather(x, dim=1, index=row_idx.unsqueeze(-1).expand_as(x))
 
 
 class SymmetryModel(nn.Module):
@@ -89,6 +81,7 @@ class SymmetryModel(nn.Module):
         return result
 
 
+@torch.no_grad()
 def test_invariant(
     model: nn.Module,
     input: Tensor,
@@ -100,28 +93,25 @@ def test_invariant(
     assert input.ndim == 3, "Input must be of shape (B, N, D)"
 
     if device is None:
-        device = model.parameters().__next__().device
+        device = next(model.parameters()).device
 
     model = model.to(device)
     input = input.to(device)
 
-    old_status = model.training
-    model.train(False)
+    model.eval()
 
-    with torch.no_grad():
-        for _ in range(test_rounds):
-            perm = Permutation(torch.randperm(input.shape[1]))
-            out1 = model(perm(input))
-            out2 = model(input)
+    for _ in range(test_rounds):
+        perm = Permutation(torch.randperm(input.shape[1], device=device))
+        out1 = model(perm(input))
+        out2 = model(input)
 
-            if not torch.allclose(out1, out2, atol=tolerance):
-                model.train(old_status)
-                return False
+        if not torch.allclose(out1, out2, atol=tolerance):
+            return False
 
-    model.train(old_status)
     return True
 
 
+@torch.no_grad()
 def test_equivariant(
     model: nn.Module,
     input: Tensor,
@@ -133,23 +123,19 @@ def test_equivariant(
     assert input.ndim == 3, "Input must be of shape (B, N, D)"
 
     if device is None:
-        device = model.parameters().__next__().device
+        device = next(model.parameters()).device
 
     model = model.to(device)
     input = input.to(device)
 
-    old_status = model.training
     model.train(False)
 
-    with torch.no_grad():
-        for _ in range(test_rounds):
-            perm = Permutation(torch.randperm(input.shape[1]))
-            out1 = model(perm(input))
-            out2 = perm(model(input))
+    for _ in range(test_rounds):
+        perm = Permutation(torch.randperm(input.shape[1], device=device))
+        out1 = model(perm(input))
+        out2 = perm(model(input))
 
-            if not torch.allclose(out1, out2, atol=tolerance):
-                model.train(old_status)
-                return False
+        if not torch.allclose(out1, out2, atol=tolerance):
+            return False
 
-    model.train(old_status)
     return True
