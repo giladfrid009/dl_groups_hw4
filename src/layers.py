@@ -19,14 +19,18 @@ class LinearEquivariant(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.bias = nn.Parameter(torch.randn(in_channels, out_channels))
-        self.alpha = nn.Parameter(torch.randn(in_channels, out_channels))
-        self.beta = nn.Parameter(torch.randn(in_channels, out_channels))
 
-        range = 1 / math.sqrt(in_channels)
-        nn.init.uniform_(self.alpha, -range, range)
-        nn.init.uniform_(self.beta, -range, range)
-        nn.init.uniform_(self.bias, -range, range)
+        self.alpha = nn.Parameter(torch.Tensor(in_channels, out_channels))
+        self.beta = nn.Parameter(torch.Tensor(in_channels, out_channels))
+        self.bias = nn.Parameter(torch.Tensor(out_channels))
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        nn.init.kaiming_uniform_(self.alpha, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.beta, a=math.sqrt(5))
+        bound = 1 / math.sqrt(self.in_channels)
+        nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -53,10 +57,10 @@ class LinearEquivariant(nn.Module):
         x_sum = torch.sum(x, dim=1, keepdim=True)
 
         # shape (B, N, in_channels, out_channels)
-        all = x * self.alpha + x_sum * self.beta + self.bias
+        all = x * self.alpha + x_sum * self.beta
 
         # shape (B, N, out_channels)
-        reduced = torch.sum(all, dim=2)
+        reduced = torch.sum(all, dim=2) + self.bias
 
         return reduced
 
@@ -76,12 +80,16 @@ class LinearInvariant(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.bias = nn.Parameter(torch.randn(in_channels, out_channels))
-        self.alpha = nn.Parameter(torch.randn(in_channels, out_channels))
 
-        range = 1 / math.sqrt(in_channels)
-        nn.init.uniform_(self.alpha, -range, range)
-        nn.init.uniform_(self.bias, -range, range)
+        self.alpha = nn.Parameter(torch.Tensor(in_channels, out_channels))
+        self.bias = nn.Parameter(torch.Tensor(out_channels))
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        nn.init.kaiming_uniform_(self.alpha, a=math.sqrt(5))
+        bound = 1 / math.sqrt(self.in_channels)
+        nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -101,19 +109,11 @@ class LinearInvariant(nn.Module):
         assert x.ndim == 3
         assert x.shape[-1] == self.in_channels
 
-        # shape (B, N, in_channels, 1)
-        x = x.unsqueeze(-1)
+        x_sum = x.sum(dim=1, keepdim=True)
 
-        # shape (B, 1, in_channels, 1)
-        x_sum = torch.sum(x, dim=1, keepdim=True)
+        output = torch.matmul(x_sum, self.alpha) + self.bias
 
-        # shape (B, 1, in_channels, out_channels)
-        all = x_sum * self.alpha + self.bias
-
-        # shape (B, 1, out_channels)
-        reduced = torch.sum(all, dim=2)
-
-        return reduced
+        return output
 
 
 class PositionalEncoding(nn.Module):

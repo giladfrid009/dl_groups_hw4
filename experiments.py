@@ -15,6 +15,19 @@ from src.permutation import Permutation, RandomPermute, create_all_permutations,
 from src.models import SymmetryModel, CanonicalModel, test_invariant, test_equivariant
 
 
+MODEL_NAMES = [
+    "canonical-mlp",
+    "canonical-attn",
+    "symmetry-mlp",
+    "symmetry-attn",
+    "symmetry-sampling-mlp",
+    "symmetry-sampling-attn",
+    "intrinsic",
+    "augmented-mlp",
+    "augmented-attn",
+]
+
+
 def create_mlp_model(n: int, d: int) -> nn.Module:
     return nn.Sequential(
         nn.Flatten(start_dim=1),
@@ -252,7 +265,13 @@ def run_invariance_tests(seq_len: int, feature_dim: int, device: torch.device | 
     print(f"Layer LinearInvariant is invariant: {invariant}")
 
 
-def run_experiments(seq_len: int, feature_dim: int, train_size: int, device: torch.device | None = None) -> None:
+def run_experiments(
+    seq_len: int,
+    feature_dim: int,
+    train_size: int,
+    device: torch.device | None = None,
+    model_names: list[str] = None,
+) -> None:
 
     if device is None:
         device = torch.device("cpu")
@@ -266,6 +285,9 @@ def run_experiments(seq_len: int, feature_dim: int, train_size: int, device: tor
     dl_test = DataLoader(dataset=ds_test, batch_size=32, shuffle=False)
 
     for model, model_name in get_models(seq_len, feature_dim):
+
+        if model_names is not None and model_name not in model_names:
+            continue
 
         print(f"Training model: {model_name}\n\n")
 
