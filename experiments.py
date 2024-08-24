@@ -291,8 +291,23 @@ def run_experiments(
 
     test_size = 1000
 
-    ds_train = GaussianDataset(num_samples=train_size, shape=(seq_len, feature_dim), var1=1.0, var2=0.8, static=False)
-    ds_test = GaussianDataset(num_samples=test_size, shape=(seq_len, feature_dim), var1=1.0, var2=0.8, static=True)
+    ds_train = GaussianDataset(
+        num_samples=train_size,
+        shape=(seq_len, feature_dim),
+        device=device,
+        var1=1.0,
+        var2=0.8,
+        static=False,
+    )
+
+    ds_test = GaussianDataset(
+        num_samples=test_size,
+        shape=(seq_len, feature_dim),
+        device=device,
+        var1=1.0,
+        var2=0.8,
+        static=True,
+    )
 
     dl_train = DataLoader(dataset=ds_train, batch_size=32, shuffle=False)
     dl_test = DataLoader(dataset=ds_test, batch_size=32, shuffle=False)

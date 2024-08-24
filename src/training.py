@@ -47,17 +47,15 @@ class Trainer(abc.ABC):
         log_dir: Optional[str] = None,
     ):
 
-        self.model = model
+        if device is None:
+            device = next(model.parameters()).device
+
         self.criterion = criterion
         self.optimizer = optimizer
-
-        if device is None:
-            device = model.parameters().__next__().device
         self.device = device
+        self.model = model.to(device)
 
         self.logger = None if not log else SummaryWriter(log_dir=log_dir)
-
-        model.to(self.device)
 
         self._log_params()
 
@@ -136,7 +134,8 @@ class Trainer(abc.ABC):
 
         # add graph to tensorboard
         if self.logger is not None:
-            self.logger.add_graph(self.model, next(iter(dl_train))[0])
+            X, _ = next(iter(dl_train))
+            self.logger.add_graph(self.model, X.to(self.device))
 
         start_time = time.time()
 
@@ -350,9 +349,7 @@ class BinaryTrainer(Trainer):
 
     def train_batch(self, batch) -> BatchResult:
         X, y = batch
-        if self.device:
-            X = X.to(self.device)
-            y = y.to(self.device)
+        X, y = X.to(self.device), y.to(self.device)
 
         self.optimizer.zero_grad()
         preds: Tensor = self.model(X)
@@ -368,9 +365,7 @@ class BinaryTrainer(Trainer):
     @torch.no_grad()
     def test_batch(self, batch) -> BatchResult:
         X, y = batch
-        if self.device:
-            X = X.to(self.device)
-            y = y.to(self.device)
+        X, y = X.to(self.device), y.to(self.device)
 
         preds: torch.Tensor = self.model(X)
         preds = preds.flatten()
