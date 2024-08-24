@@ -27,20 +27,6 @@ class CanonicalModel(nn.Module):
         return self.model(x)
 
     def canonize(self, x: Tensor) -> Tensor:
-        """
-        Transforms the input tensor into a canonical form.
-
-        Data dimensions:
-        * B is batch size
-        * N is sequence length
-        * D is feature / channel dimension
-
-        Args:
-            x (Tensor): Input tensor of shape (B, N, D).
-
-        Returns:
-            Tensor: Output tensor of shape (B, N, D).
-        """
         B, N, D = x.shape
 
         # extract data from each sequence element features
@@ -49,11 +35,9 @@ class CanonicalModel(nn.Module):
         # sort sequence elements by the extracted data
         row_idx = torch.argsort(sort_key, dim=-1)
 
-        batch_idx = torch.arange(B).unsqueeze(1).broadcast_to(B, N)
+        batch_idx = torch.arange(B, device=x.device).unsqueeze(1).expand(B, N)
 
-        x = x[batch_idx, row_idx]
-
-        return x
+        return x[batch_idx, row_idx]
 
 
 class SymmetryModel(nn.Module):
