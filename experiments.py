@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 import lightning as lit
-from lightning.pytorch import callbacks
+from lightning.pytorch import callbacks, Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.fabric.utilities import throughput
 
@@ -42,26 +42,26 @@ class LitModel(lit.LightningModule):
         y_hat: Tensor = self.model(x)
         return y_hat.flatten()
 
-    def _step(self, batch, batch_idx: int) -> tuple[Tensor, float]:
+    def training_step(self, batch, batch_idx: int) -> Tensor:
         x, y = batch
         y_hat = self(x)
         loss = F.binary_cross_entropy(y_hat, y)
-        acc = ((y_hat > 0.5) == y).float().mean()
-        return loss, acc
-
-    def training_step(self, batch, batch_idx: int) -> Tensor:
-        loss, acc = self._step(batch, batch_idx)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx: int) -> None:
-        loss, acc = self._step(batch, batch_idx)
+        x, y = batch
+        y_hat = self(x)
+        loss = F.binary_cross_entropy(y_hat, y)
+        acc = (y_hat.round() == y).float().mean()
         self.log("val_loss", loss, on_epoch=True, prog_bar=True)
         self.log("val_acc", acc, on_epoch=True, prog_bar=True)
 
     def test_step(self, batch, batch_idx: int) -> None:
-        loss, acc = self._step(batch, batch_idx)
+        x, y = batch
+        y_hat = self(x)
+        loss = F.binary_cross_entropy(y_hat, y)
+        acc = (y_hat.round() == y).float().mean()
         self.log("test_loss", loss, on_epoch=True)
         self.log("test_acc", acc, on_epoch=True)
 
@@ -270,8 +270,8 @@ def run_time_benchmarks(
 
         inference_time = measure_inference_time(model=model, input=input, device=device, repeats=repeats)
         training_time = measure_training_time(model=model, input=input, device=device, repeats=repeats)
-        print(f"Model {model_name} inference time: {inference_time:.8f} seconds")
-        print(f"Model {model_name} training time : {training_time:.8f} seconds")
+        print(f"Model {model_name} inference time: {inference_time:.8f} s")
+        print(f"Model {model_name} training time : {training_time:.8f} s")
 
 
 def run_flops_benchmarks(
@@ -371,8 +371,8 @@ def run_experiments(
         dataset=ds_train,
         batch_size=32,
         shuffle=True,
-        num_workers=0,
-        persistent_workers=False,
+        num_workers=7,
+        persistent_workers=True,
         drop_last=True,
         pin_memory=True,
     )
@@ -404,7 +404,11 @@ def run_experiments(
         logger = TensorBoardLogger(save_dir=f"lightning_logs", name=f"train{train_size}_seq{seq_len}/{model_name}")
 
         early_stop_callback = callbacks.EarlyStopping(
-            monitor="val_acc", mode="max", patience=200, strict=True, check_finite=True
+            monitor="val_acc",
+            mode="max",
+            patience=200,
+            strict=True,
+            check_finite=True,
         )
 
         checkpoint_callback = callbacks.ModelCheckpoint(monitor="val_acc", mode="max", save_top_k=1)
@@ -413,7 +417,7 @@ def run_experiments(
 
         progress_callback = callbacks.RichProgressBar()
 
-        trainer = lit.Trainer(
+        trainer = Trainer(
             accelerator="auto",
             strategy="auto",
             devices="auto",
