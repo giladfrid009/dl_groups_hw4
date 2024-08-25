@@ -1,4 +1,3 @@
-import math
 import time
 from tqdm.auto import tqdm
 from typing import Iterable, Any
@@ -13,6 +12,7 @@ from torch.utils.data import DataLoader
 import lightning as lit
 from lightning.pytorch import callbacks
 from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.fabric.utilities import throughput
 
 from src.gaussian_dataset import GaussianDataset
 from src.layers import LinearEquivariant, LinearInvariant, PositionalEncoding
@@ -274,6 +274,34 @@ def run_time_benchmarks(
         print(f"Model {model_name} training time : {training_time:.8f} seconds")
 
 
+def run_flops_benchmarks(
+    seq_len: int,
+    feature_dim: int,
+    device: torch.device | None = None,
+    input_batch: int = 32,
+    model_names: list[str] = None,
+) -> None:
+
+    if device is None:
+        device = auto_device()
+
+    input = torch.randn(input_batch, seq_len, feature_dim).to(device)
+
+    for model, model_name in get_models(seq_len, feature_dim):
+
+        if model_names is not None and model_name not in model_names:
+            continue
+
+        model_fwd = lambda: model(input)
+        fwd_flops = throughput.measure_flops(model, model_fwd)
+
+        model_loss = lambda y: y.sum()
+        fwd_and_bwd_flops = throughput.measure_flops(model, model_fwd, model_loss)
+
+        print(f"Model {model_name} forward FLOPs: {fwd_flops:.2e}")
+        print(f"Model {model_name} forward and backward FLOPs: {fwd_and_bwd_flops:.2e}")
+
+
 def run_invariance_tests(
     seq_len: int,
     feature_dim: int,
@@ -343,8 +371,8 @@ def run_experiments(
         dataset=ds_train,
         batch_size=32,
         shuffle=True,
-        num_workers=7,
-        persistent_workers=True,
+        num_workers=0,
+        persistent_workers=False,
         drop_last=True,
         pin_memory=True,
     )
@@ -375,7 +403,9 @@ def run_experiments(
 
         logger = TensorBoardLogger(save_dir=f"lightning_logs", name=f"train{train_size}_seq{seq_len}/{model_name}")
 
-        early_stop_callback = callbacks.EarlyStopping(monitor="val_acc", mode="max", patience=200, strict=True, check_finite=True)
+        early_stop_callback = callbacks.EarlyStopping(
+            monitor="val_acc", mode="max", patience=200, strict=True, check_finite=True
+        )
 
         checkpoint_callback = callbacks.ModelCheckpoint(monitor="val_acc", mode="max", save_top_k=1)
 
@@ -388,14 +418,14 @@ def run_experiments(
             strategy="auto",
             devices="auto",
             precision="32-true",
-            max_epochs=100,
+            max_epochs=1,
             max_time="00:00:30:00",
             callbacks=[early_stop_callback, checkpoint_callback, summary_callback, progress_callback],
             logger=logger,
             log_every_n_steps=50,
             enable_checkpointing=True,
             benchmark=True,
-            profiler=None,
+            profiler="simple",
             deterministic=False,
             fast_dev_run=False,
         )
