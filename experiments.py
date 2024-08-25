@@ -1,16 +1,21 @@
 import math
 import time
 from tqdm.auto import tqdm
-from typing import Iterable
+from typing import Iterable, Any
+
 import torch
+from torch import optim
+import torch.nn.functional as F
 from torch import Tensor
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
+import lightning as lit
+from lightning.pytorch import callbacks
+from lightning.pytorch.loggers import TensorBoardLogger
+
 from src.gaussian_dataset import GaussianDataset
-from src.training import BinaryTrainer
 from src.layers import LinearEquivariant, LinearInvariant, PositionalEncoding
-from src.train_results import FitResult
 from src.permutation import Permutation, RandomPermute, create_all_permutations, create_permutations_from_generators
 from src.models import SymmetryModel, CanonicalModel, test_invariant, test_equivariant
 
@@ -26,6 +31,44 @@ MODEL_NAMES = [
     "augmented-mlp",
     "augmented-attn",
 ]
+
+
+class LitModel(lit.LightningModule):
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x: Tensor) -> Tensor:
+        y_hat: Tensor = self.model(x)
+        return y_hat.flatten()
+
+    def _step(self, batch, batch_idx: int) -> tuple[Tensor, float]:
+        x, y = batch
+        y_hat = self(x)
+        loss = F.binary_cross_entropy(y_hat, y)
+        acc = ((y_hat > 0.5) == y).float().mean()
+        return loss, acc
+
+    def training_step(self, batch, batch_idx: int) -> Tensor:
+        loss, acc = self._step(batch, batch_idx)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx: int) -> None:
+        loss, acc = self._step(batch, batch_idx)
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True)
+        self.log("val_acc", acc, on_epoch=True, prog_bar=True)
+
+    def test_step(self, batch, batch_idx: int) -> None:
+        loss, acc = self._step(batch, batch_idx)
+        self.log("test_loss", loss, on_epoch=True)
+        self.log("test_acc", acc, on_epoch=True)
+
+    def configure_optimizers(self) -> dict[str, Any]:
+        optimizer = optim.Adam(self.parameters(), lr=0.001)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=50)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
 def create_mlp_model(n: int, d: int) -> nn.Module:
@@ -141,6 +184,10 @@ def get_models(n: int, d: int) -> Iterable[tuple[nn.Module, str]]:
     yield model, model_name
 
 
+def auto_device() -> torch.device:
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def measure_inference_time(model: nn.Module, input: Tensor, device: torch.device, repeats: int) -> float:
     model = model.to(device)
     input = input.to(device)
@@ -212,7 +259,7 @@ def run_time_benchmarks(
     model_names: list[str] = None,
 ) -> None:
     if device is None:
-        device = torch.device("cpu")
+        device = auto_device()
 
     input = torch.randn(input_batch, seq_len, feature_dim).to(device)
 
@@ -233,8 +280,9 @@ def run_invariance_tests(
     device: torch.device | None = None,
     model_names: list[str] = None,
 ) -> None:
+
     if device is None:
-        device = torch.device("cpu")
+        device = auto_device()
 
     input = torch.randn(5, seq_len, feature_dim).to(device)
 
@@ -282,63 +330,76 @@ def run_experiments(
     seq_len: int,
     feature_dim: int,
     train_size: int,
-    device: torch.device | None = None,
     model_names: list[str] = None,
 ) -> None:
 
-    if device is None:
-        device = torch.device("cpu")
-
     test_size = 1000
 
-    ds_train = GaussianDataset(
-        num_samples=train_size,
-        shape=(seq_len, feature_dim),
-        device=device,
-        var1=1.0,
-        var2=0.8,
-        static=False,
+    ds_train = GaussianDataset(num_samples=train_size, shape=(seq_len, feature_dim), var1=1.0, var2=0.8, static=False)
+    ds_val = GaussianDataset(num_samples=test_size, shape=(seq_len, feature_dim), var1=1.0, var2=0.8, static=True)
+    ds_test = GaussianDataset(num_samples=test_size, shape=(seq_len, feature_dim), var1=1.0, var2=0.8, static=True)
+
+    dl_train = DataLoader(
+        dataset=ds_train,
+        batch_size=32,
+        shuffle=True,
+        num_workers=7,
+        persistent_workers=True,
+        drop_last=True,
+        pin_memory=True,
     )
 
-    ds_test = GaussianDataset(
-        num_samples=test_size,
-        shape=(seq_len, feature_dim),
-        device=device,
-        var1=1.0,
-        var2=0.8,
-        static=True,
+    dl_val = DataLoader(
+        dataset=ds_val,
+        batch_size=32,
+        shuffle=False,
+        num_workers=0,
+        drop_last=True,
+        pin_memory=True,
     )
 
-    dl_train = DataLoader(dataset=ds_train, batch_size=32, shuffle=False)
-    dl_test = DataLoader(dataset=ds_test, batch_size=32, shuffle=False)
+    dl_test = DataLoader(
+        dataset=ds_test,
+        batch_size=32,
+        shuffle=False,
+        num_workers=0,
+        drop_last=True,
+        pin_memory=True,
+    )
 
     for model, model_name in get_models(seq_len, feature_dim):
-
         if model_names is not None and model_name not in model_names:
             continue
 
-        print(f"Training model: {model_name}\n\n")
+        lightning_model = LitModel(model)
 
-        trainer = BinaryTrainer(
-            model=model,
-            criterion=nn.BCELoss(),
-            optimizer=torch.optim.Adam(model.parameters(), lr=0.001),
-            device=device,
-            log=True,
-            log_dir=f"train{train_size}_seq{seq_len}/{model_name}",
+        logger = TensorBoardLogger(save_dir=f"lightning_logs", name=f"train{train_size}_seq{seq_len}/{model_name}")
+
+        early_stop_callback = callbacks.EarlyStopping(monitor="val_acc", mode="max", patience=200, strict=True, check_finite=True)
+
+        checkpoint_callback = callbacks.ModelCheckpoint(monitor="val_acc", mode="max", save_top_k=1)
+
+        summary_callback = callbacks.RichModelSummary(max_depth=3)
+
+        progress_callback = callbacks.RichProgressBar()
+
+        trainer = lit.Trainer(
+            accelerator="auto",
+            strategy="auto",
+            devices="auto",
+            precision="32-true",
+            max_epochs=100,
+            max_time="00:00:30:00",
+            callbacks=[early_stop_callback, checkpoint_callback, summary_callback, progress_callback],
+            logger=logger,
+            log_every_n_steps=50,
+            enable_checkpointing=True,
+            benchmark=True,
+            profiler=None,
+            deterministic=False,
+            fast_dev_run=False,
         )
 
-        fit_result = trainer.fit(
-            dl_train=dl_train,
-            dl_test=dl_test,
-            num_epochs=10000,
-            print_every=25,
-            time_limit=60 * 30,
-            early_stopping=200,
-        )
+        trainer.fit(lightning_model, dl_train, dl_val)
 
-        print("\n\n#################")
-        print("Training complete.")
-        print(f"Final Test loss    : {fit_result.test_loss[-1]}")
-        print(f"Final Test accuracy: {fit_result.test_acc[-1]}")
-        print("#################\n\n")
+        trainer.test(lightning_model, dl_test, ckpt_path="best", verbose=True)
