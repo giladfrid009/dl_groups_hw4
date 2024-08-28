@@ -46,23 +46,22 @@ class LinearEquivariant(nn.Module):
         Returns:
             Tensor: Output tensor of shape (B, N, out_channels).
         """
-
         assert x.ndim == 3
         assert x.shape[-1] == self.in_channels
 
-        # shape (B, N, in_channels, 1)
-        x = x.unsqueeze(-1)
+        # sum_x shape: (B, 1, in_channels)
+        sum_x = x.sum(dim=1, keepdim=True)
 
-        # shape (B, 1, in_channels, 1)
-        x_sum = torch.sum(x, dim=1, keepdim=True)
+        # x @ self.alpha: (B, N, in_channels) @ (in_channels, out_channels) -> (B, N, out_channels)
+        #   x broadcasted to (B, N, in_channels, 1) and self.alpha broadcasted to (1, 1, in_channels, out_channels)
+        #   then element-wise multiplication and sum over in_channels
+        # sum_x @ self.beta: (B, 1, in_channels) @ (in_channels, out_channels) -> (B, 1, out_channels)
+        #   sum_x broadcasted to (B, 1, in_channels, 1) and self.beta broadcasted to (1, 1, in_channels, out_channels)
+        #   then element-wise multiplication and sum over in_channels
+        # self.bias: (out_channels,) broadcasted to (B, N, out_channels)
+        result = x @ self.alpha + sum_x @ self.beta + self.bias
 
-        # shape (B, N, in_channels, out_channels)
-        all = x * self.alpha + x_sum * self.beta
-
-        # shape (B, N, out_channels)
-        reduced = torch.sum(all, dim=2) + self.bias
-
-        return reduced
+        return result
 
 
 class LinearInvariant(nn.Module):
