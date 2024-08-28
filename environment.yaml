@@ -1,0 +1,22 @@
+# before running please install pytorch dependencies:
+# conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
+
+name: dl-groups
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - ipython
+  - jupyter
+  - jupyterlab
+  - numpy
+  - pip
+  - python
+  - tqdm
+  - lightning
+  - rich
+  - pip:
+      - tensorboard
+platforms:
+  - linux-64
