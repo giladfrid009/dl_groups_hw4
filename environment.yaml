@@ -19,5 +19,3 @@ dependencies:
   - rich
   - pip:
       - tensorboard
-platforms:
-  - linux-64
